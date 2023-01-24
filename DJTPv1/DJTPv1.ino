@@ -1,29 +1,29 @@
 
 #include <DMXSerial.h>
 
-#define T_RISE 60
-#define T_FALL 60
+#define T_RISE 60       // [s], rise time when potentiometer is at full right
+#define T_FALL 60       // [s], fall time when potentiometer is at full right
+#define START_DELAY 6   // [?]
 
-#define START_DELAY 6
-
+// Arduino Uno pin definitions
 #define PIN_ANALOG_ATTACK_IN 0
 #define PIN_ANALOG_RELEASE_IN 1
-
 #define PIN_MAIN_BYPASS_IN 8
 #define PIN_MAIN_EXPONENTIAL_IN 9
 #define PIN_ALARM_IN 10
 #define PIN_TEST_IN 11
-
 #define PIN_DMX_OUT 1
 
-//#define DMX_CH_DIM 1 // main dimmer for the fixture
-#define DMX_CH_R 1
-#define DMX_CH_G 2
-#define DMX_CH_B 3
-//#define DMX_CH_W 5
+// Example definition of DMX channels 1..5 for a simple RGBW fixture.
+// Currently unused, see very end of main loop.
+#define DMX_CH_DIM 1 // main dimmer of the fixture
+#define DMX_CH_R 2
+#define DMX_CH_G 3
+#define DMX_CH_B 4
+#define DMX_CH_W 5
 
+// Implement potentiometer averaging to filter out noise
 class Averaged_Analog_Pin {
-  
   private:
     size_t pin;
     uint16_t* buf;
@@ -72,8 +72,11 @@ void setup() {
   rlease = new Averaged_Analog_Pin(PIN_ANALOG_RELEASE_IN, 10);
 
   DMXSerial.init(DMXController, PIN_DMX_OUT);
+
+  // Set constant channels
   // DMXSerial.write(DMX_CH_DIM, 255); // Set main dimmer to full intensity
 } // setup
+
 
 uint8_t intensity = 0;
 uint16_t n_samples_over = 0;
@@ -86,15 +89,17 @@ void loop() {
   float attack_dly = 0;
   float rlease_dly = 0;
 
-  if (digitalRead(PIN_MAIN_BYPASS_IN) == LOW) {
+  if (digitalRead(PIN_MAIN_BYPASS_IN) == LOW) { // BYPASS/OFF
     
     n_samples_over = 0;
     intensity = 0;
     
-  } else if (digitalRead(PIN_MAIN_EXPONENTIAL_IN) == LOW) {
+  } else if (digitalRead(PIN_MAIN_EXPONENTIAL_IN) == LOW) { // EXPONENTIAL increase/decrease
 
     if (digitalRead(PIN_TEST_IN) == LOW || digitalRead(PIN_ALARM_IN) == HIGH) {
+      // Trigger by test button or alarm input.
       if (digitalRead(PIN_TEST_IN) == HIGH && n_samples_over++ < START_DELAY * 800) {
+        // Implement an initial delay, except when test button is pressed.
         delay(1);
       } else {
         n_samples_over = START_DELAY * 800;
@@ -106,6 +111,7 @@ void loop() {
         }
       }
     } else {
+      // Test button or alarm input released.
       n_samples_over = 0;
       if (intensity-- == 0) {
         intensity = 0;
@@ -114,7 +120,8 @@ void loop() {
         delay(round(rlease_dly));
       }
     }
-  } else { // LINEAR
+
+  } else { // LINEAR increase/decrease
 
     if (digitalRead(PIN_TEST_IN) == LOW || digitalRead(PIN_ALARM_IN) == HIGH) {
       if (digitalRead(PIN_TEST_IN) == HIGH && n_samples_over++ < START_DELAY * 800) {
@@ -140,14 +147,14 @@ void loop() {
 
   }
 
+  // Blast DMX channels 1..255
   for (uint16_t i = 1u; i <= 255; i++) {
     DMXSerial.write(i, intensity);
   }
+
+  // Assuming Light fixture with Dimmer fixed full:
   //DMXSerial.write(DMX_CH_R, intensity);
   //DMXSerial.write(DMX_CH_G, intensity);
   //DMXSerial.write(DMX_CH_B, intensity);
-
-  //Serial.println(", ");
-  //delayMicroseconds(500);
 
 } // loop
